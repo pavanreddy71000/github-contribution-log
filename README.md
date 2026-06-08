@@ -1,9 +1,9 @@
 # Contribution #1: Add "Change Email" Feature
 
 **Contribution Number:** 1  
-**Student:** Sai Pavan Reddy
-**Issue:** https://github.com/321-Vegan/321vegan-api/issues/76
-**Status:** Phase I Complete
+**Student:** Sai Pavan Reddy  
+**Issue:** https://github.com/321-Vegan/321vegan-api/issues/76  
+**Status:** Phase I Complete  
 
 ---
 
