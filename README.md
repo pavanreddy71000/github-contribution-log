@@ -3,7 +3,7 @@
 **Contribution Number:** 1  
 **Student:** Sai Pavan Reddy Doddam Reddy  
 **Issue:** https://github.com/321-Vegan/321vegan-api/issues/76  
-**Status:** Phase II Complete
+**Status:** Phase III Complete
 
 ---
 
@@ -100,5 +100,69 @@ Using UMPIRE framework (adapted):
 **Review:** Follow the project's CONTRIBUTING.md guidelines, match existing code style, run any existing tests.
 
 **Evaluate:** Verify password rejection returns 401, duplicate email returns 409, expired token returns 400, and the happy path swaps the email and notifies the old address.
+
+---
+
+## Testing Strategy
+
+### Manual Testing (via Swagger UI)
+
+- [x] Correct password + valid new email → 200, "A confirmation email has been sent to your new email address."
+- [x] Wrong password → 401 Unauthorized, "Incorrect password."
+- [x] Valid token confirms the email change → 200, "Your email address has been updated successfully."
+- [x] Invalid token → 400 Bad Request, "Invalid or expired email change token."
+- [x] Database verified: email swapped from `admin@example.com` to `test@example.com`, pending fields cleared to NULL after confirmation
+
+### Notes
+
+- SMTP credentials are not configured in the local dev environment, so the email service logs "Would send email to..." instead of actually sending. The code path still executes fully — it just skips the SMTP connection when credentials are empty.
+- Duplicate email (409) test was not run separately because `request_email_change()` in the CRUD layer handles that check, and the happy path test already exercises the non-duplicate path.
+
+---
+
+## Implementation Notes
+
+### What I Built
+
+Implemented the full email change feature across 5 existing files plus 1 new migration file. The implementation follows the existing password reset flow as a structural template, as the maintainer suggested.
+
+I broke the work into four coding phases to keep each session focused:
+
+**Phase A — Database layer:**
+Added three columns (`pending_email`, `email_change_token`, `email_change_expires`) to the User model in `models/user.py`. Used Alembic's `--autogenerate` to create the migration — Alembic compared my updated model to the live database and generated the `add_column` calls automatically. Added the `EmailChangeRequest` Pydantic schema to `schemas/auth.py` with `new_email` (EmailStr) and `current_password` (str) fields.
+
+**Phase B — Business logic:**
+Added two CRUD methods to `crud/user.py`: `request_email_change()` checks email uniqueness, generates a token via `generate_reset_token()`, stores the pending data with an expiry, and returns the token. `confirm_email_change()` looks up the user by `email_change_token`, checks expiry, swaps `pending_email` into `email`, and clears the temporary fields.
+
+**Phase C — Email service and endpoints:**
+Added `send_email_change_confirmation()` and `send_email_change_notification()` to `services/email.py`, following the same HTML/text email template pattern as the existing `send_password_reset_email()`. Added `PATCH /me/email` and `GET /me/email/confirm` endpoints to `routes/account.py`. The PATCH endpoint verifies the password, triggers the change request, and sends the confirmation email. The GET endpoint validates the token, applies the email swap, and notifies the old address.
+
+**Phase D — Testing and PR:**
+Tested the full happy path and error cases through the Swagger UI. Reset test data afterward. Opened pull request #85.
+
+### Challenges Faced
+
+1. **Port 5432 conflict kept returning:** Every time I synced my fork or did `docker compose down && up`, the `docker-compose.yml` port would reset back to 5432 because that's what's in the repo. I had to change it to 5433 each time. The fix is local-only and not committed, since it would break things for other contributors.
+
+2. **SMTP credentials causing 500 errors:** The first time I tested `PATCH /me/email`, it returned a 500 "Failed to send confirmation email." The `.env` had `SMTP_PASSWORD=putPasswordHere` — a fake value that made the email service try (and fail) to connect to the SMTP server. Clearing `SMTP_PASSWORD=` triggered the fallback path that skips sending and just logs.
+
+3. **Understanding `get_one` and SQLAlchemy filters:** I initially tried reusing `verify_reset_token()` in `confirm_email_change()`, but that searches the wrong column (`reset_token` instead of `email_change_token`). Had to learn that `self.get_one(db, User.email_change_token == token)` is a SQLAlchemy filter expression that gets translated to SQL, not a Python comparison.
+
+4. **Mixing up column names in expiry check:** Wrote `user.email_change_token < datetime.now()` instead of `user.email_change_expires < datetime.now()` — comparing a string to a datetime, which would crash at runtime. Caught it during code review before testing.
+
+### Code Changes
+
+- **Files modified:**
+  - `src/app/models/user.py` — 3 new columns
+  - `src/alembic/versions/073f10aae432_add_email_change_fields_to_users.py` — new migration (auto-generated)
+  - `src/app/schemas/auth.py` — new `EmailChangeRequest` schema
+  - `src/app/crud/user.py` — 2 new CRUD methods
+  - `src/app/services/email.py` — 2 new email methods
+  - `src/app/routes/account.py` — 2 new endpoints + 3 new imports
+- **Key commits:**
+  - `8879a87` — Add database columns and schema for email change feature
+  - `21bbe09` — Add request and confirm email change CRUD methods
+  - `12b9c4b` — Add email change endpoints and email service methods
+- **Approach decisions:** Followed the maintainer's recommendation to model everything on the existing password reset flow. Used `generate_reset_token()` (the same token generator) rather than creating a separate one for email changes, keeping the codebase consistent.
 
 ---
