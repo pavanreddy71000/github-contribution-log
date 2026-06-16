@@ -137,8 +137,8 @@ Added two CRUD methods to `crud/user.py`: `request_email_change()` checks email 
 **Phase C — Email service and endpoints:**
 Added `send_email_change_confirmation()` and `send_email_change_notification()` to `services/email.py`, following the same HTML/text email template pattern as the existing `send_password_reset_email()`. Added `PATCH /me/email` and `GET /me/email/confirm` endpoints to `routes/account.py`. The PATCH endpoint verifies the password, triggers the change request, and sends the confirmation email. The GET endpoint validates the token, applies the email swap, and notifies the old address.
 
-**Phase D — Testing and PR:**
-Tested the full happy path and error cases through the Swagger UI. Reset test data afterward. Opened pull request #85.
+**Phase D — Testing:**
+Tested the full happy path and error cases through the Swagger UI. Reset test data afterward.
 
 ### Challenges Faced
 
