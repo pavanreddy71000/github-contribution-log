@@ -3,7 +3,7 @@
 **Contribution Number:** 1  
 **Student:** Sai Pavan Reddy Doddam Reddy  
 **Issue:** https://github.com/321-Vegan/321vegan-api/issues/76  
-**Status:** Phase III Complete
+**Status:** Phase IV Complete
 
 ---
 
@@ -137,8 +137,8 @@ Added two CRUD methods to `crud/user.py`: `request_email_change()` checks email 
 **Phase C — Email service and endpoints:**
 Added `send_email_change_confirmation()` and `send_email_change_notification()` to `services/email.py`, following the same HTML/text email template pattern as the existing `send_password_reset_email()`. Added `PATCH /me/email` and `GET /me/email/confirm` endpoints to `routes/account.py`. The PATCH endpoint verifies the password, triggers the change request, and sends the confirmation email. The GET endpoint validates the token, applies the email swap, and notifies the old address.
 
-**Phase D — Testing:**
-Tested the full happy path and error cases through the Swagger UI. Reset test data afterward.
+**Phase D — Testing and PR:**
+Tested the full happy path and error cases through the Swagger UI. Reset test data afterward. Opened pull request #85.
 
 ### Challenges Faced
 
@@ -163,6 +163,56 @@ Tested the full happy path and error cases through the Swagger UI. Reset test da
   - `8879a87` — Add database columns and schema for email change feature
   - `21bbe09` — Add request and confirm email change CRUD methods
   - `12b9c4b` — Add email change endpoints and email service methods
+  - `0acf7b0` — Refactor: return old email from confirm_email_change to remove redundant query
 - **Approach decisions:** Followed the maintainer's recommendation to model everything on the existing password reset flow. Used `generate_reset_token()` (the same token generator) rather than creating a separate one for email changes, keeping the codebase consistent.
 
 ---
+
+## Pull Request
+
+**PR Link:** https://github.com/321-Vegan/321vegan-api/pull/85
+
+**PR Description:** Adds a `PATCH /me/email` endpoint that lets users change their email address with password verification and token-based email confirmation. Follows the existing password reset flow as a structural template. Includes database migration, Pydantic schema, CRUD methods, email service, and route handlers. Closes #76.
+
+**Maintainer Feedback:**
+- June 18: @llambrecht reviewed and requested one change — the confirm endpoint had a redundant `get_one` database query to capture `old_email` before calling `confirm_email_change()`, which does the same lookup internally. He suggested having `confirm_email_change()` return the old email alongside the user so the extra query could be removed.
+- June 18: Implemented the refactor — updated `confirm_email_change()` to return a `(user, old_email)` tuple and simplified the route from 5 lines to 1 line. Pushed commit `0acf7b0`. Re-tested the full flow.
+- June 18: @llambrecht approved and merged. Feedback: "The implementation is clean, and exactly in line with what I had in mind!"
+
+**Status:** Merged
+
+---
+
+## Learnings & Reflections
+
+### Technical Skills Gained
+
+- Learned how FastAPI routes, Pydantic schemas, SQLAlchemy models, and Alembic migrations fit together in a real production codebase — not just isolated tutorials.
+- Understood how token-based verification flows work end to end: generate token → store with expiry → email a link → validate on click → apply the change → clear temporary data.
+- Got comfortable with Docker Compose for local development, including debugging container startup failures and environment variable issues.
+- Learned that returning richer data from lower layers (like a tuple instead of a single value) can eliminate redundant database queries in the layer above — a practical lesson in API design that came directly from maintainer feedback.
+
+### Challenges Overcome
+
+- Environment debugging (port conflicts, Pydantic crashes, SMTP failures) took a significant chunk of time but taught me that open source onboarding friction is normal and worth documenting for future contributors.
+- Two bugs in my initial code (wrong column in `get_one`, wrong field in expiry check) came from copying the password reset pattern too literally. Learned to trace every field name back to its source rather than assuming a find-and-replace covers everything.
+- Responding to maintainer feedback on a live PR was new — learned to acknowledge the feedback, implement the change, re-test, and push a follow-up commit rather than opening a new PR.
+
+### What I'd Do Differently Next Time
+
+- Would auto-generate the Alembic migration from the start instead of considering writing it by hand — `--autogenerate` is faster and less error-prone.
+- Would clear SMTP credentials in `.env` before the first test run, not after a 500 error.
+- Would commit more atomically — some of my CRUD commits were duplicated because my editor auto-formatted on save, creating extra diffs.
+- Would look for redundant database queries during self-review before submitting the PR — the maintainer caught it, but I should have spotted it myself.
+
+---
+
+## Resources Used
+
+- [321vegan-api repository](https://github.com/321-Vegan/321vegan-api)
+- [Issue #76: Change email feature](https://github.com/321-Vegan/321vegan-api/issues/76)
+- [PR #85: Add email change feature](https://github.com/321-Vegan/321vegan-api/pull/85)
+- [Maintainer implementation guidance](https://github.com/321-Vegan/321vegan-api/issues/76#issuecomment-4642792577)
+- [FastAPI documentation](https://fastapi.tiangolo.com/)
+- [Alembic documentation](https://alembic.sqlalchemy.org/)
+- [SQLAlchemy documentation](https://docs.sqlalchemy.org/)
