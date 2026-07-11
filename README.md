@@ -60,13 +60,16 @@ Working branch: https://github.com/pavanreddy71000/ML-IDS/tree/feature/alerts-pa
 
 **Match:** The existing endpoint already demonstrates the query-building pattern I'll extend — filters are composed with `select()`, `where()`, and `order_by()`. I'll follow the same async SQLAlchemy pattern for the count query. The `AlertResponse` schema in `schemas.py` shows how Pydantic models are structured in this project, which I'll use as a template for the new paginated response schema.
 
+**Plan:**
+1. Add a `PaginatedAlertResponse` Pydantic schema in `schemas.py` with fields: `alerts` (list of AlertResponse), `total` (int), `limit` (int), `offset` (int)
+2. Modify `list_alerts` in `routers/alerts.py`:
+   - Change default limit from 100 to 20, max from 1000 to 100
+   - Add a `SELECT COUNT(*)` query (using `func.count()`) before the paginated query to get total matching alerts
+   - Return a `JSONResponse` with the wrapped body and `X-Total-Count`, `X-Page-Size`, `X-Page-Offset` headers
+   - Add validation: return 400 for `limit < 1` or `offset < 0`
+3. Write unit tests covering: first page, middle page, last page, invalid parameters (negative limit, negative offset), and backward compatibility (no params returns first page with default limit)
 
 **Implement:** Working branch: https://github.com/pavanreddy71000/ML-IDS/tree/feature/alerts-pagination
-
-**Files to modify:**
-- `src/inference_server/schemas.py` — add `PaginatedAlertResponse`
-- `src/inference_server/routers/alerts.py` — modify `list_alerts` endpoint
-- `tests/` — add pagination tests (new test file or extend existing)
 
 **Review:** Will follow the project's CONTRIBUTING.md conventions: PEP 8 style, async/await for all I/O, type hints on all functions, docstrings on public functions, and conventional commit messages (`feat: add pagination to alerts endpoint`).
 
