@@ -76,3 +76,45 @@ Working branch: https://github.com/pavanreddy71000/ML-IDS/tree/feature/alerts-pa
 **Evaluate:** All existing tests must continue to pass. New pagination tests will verify correct page slicing, total count accuracy, response header presence, 400 errors for invalid params, and backward compatibility. Manual verification by calling `GET /api/alerts?limit=20&offset=0` and confirming the response shape matches the issue's expected format.
 
 ---
+
+## Testing Strategy
+
+### Integration Tests (`tests/test_alerts_pagination.py`)
+
+7 new tests using FastAPI's `TestClient` with an in-memory SQLite database and the dependency override pattern to replace `get_db` with a test database seeded with 25 alerts.
+
+- ✅ `test_default_pagination` — No params returns first page with default limit (20), correct total count (25), and all three pagination headers
+- ✅ `test_explicit_first_page` — `limit=10&offset=0` returns first 10 alerts with correct metadata
+- ✅ `test_second_page` — `limit=10&offset=10` returns alerts 11-20 with offset reflected in response
+- ✅ `test_last_page` — `limit=10&offset=20` returns only 5 remaining alerts, total still 25
+- ✅ `test_offset_beyond_total` — `limit=10&offset=100` returns empty alerts list with correct total (200, not error)
+- ✅ `test_invalid_negative_limit` — `limit=-1` returns HTTP 400
+- ✅ `test_invalid_negative_offset` — `offset=-1` returns HTTP 400
+
+All 4 original tests continue to pass. Full suite: **11 passed, 0 failed.**
+
+---
+
+## Implementation Notes
+
+### Code Changes
+
+**Files modified (3):**
+
+- `src/inference_server/schemas.py` — Added `PaginatedAlertResponse` schema with `alerts`, `total`, `limit`, `offset` fields. Also added a `field_validator` to `AlertResponse` to convert `datetime` objects to ISO strings, fixing a pre-existing timestamp serialization mismatch between the database model (`DateTime` column) and the schema (`str` field).
+
+- `src/inference_server/routers/alerts.py` — Modified `list_alerts` endpoint: changed `response_model` to `PaginatedAlertResponse`, updated defaults (`limit=20`, max `100`), added a separate `SELECT COUNT(*)` query using `func.count()` for total count, injected `Response` parameter for setting `X-Total-Count`, `X-Page-Size`, `X-Page-Offset` headers, and added manual validation returning 400 for invalid `limit`/`offset` values.
+
+- `tests/test_alerts_pagination.py` — New test file with 7 integration tests using in-memory SQLite, `async_sessionmaker`, and FastAPI's dependency override pattern. Tests cover happy path, boundary cases, and invalid input.
+
+**Branch:** https://github.com/pavanreddy71000/ML-IDS/tree/feature/alerts-pagination
+
+### Challenges Faced
+
+- **Timestamp serialization bug:** Tests revealed that `AlertResponse.timestamp` is typed as `str` but the database returns `datetime` objects. Fixed by adding a `field_validator` that converts `datetime` to ISO string format. This was a pre-existing issue in the codebase, not caused by the pagination changes.
+
+- **Count query placement:** Initially wrote the count query incorrectly by calling `query.func.count()` (treating `func` as a method on the query object). Learned that `func.count()` is a standalone SQLAlchemy function used to build a separate `SELECT COUNT(*)` query.
+
+- **Response parameter positioning:** Python requires parameters without defaults to come before parameters with defaults. Had to move `response: Response` to the top of the parameter list.
+
+- **Double-counted time filter:** Initially applied the time filter both through the `conditions` list and a separate `if hours` check in the count query, which would have filtered more aggressively than intended.
